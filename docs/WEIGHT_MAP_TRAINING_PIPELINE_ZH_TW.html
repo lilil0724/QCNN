@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qwen3 → Ternary Bonsai：已執行的 Weight-map 訓練流程</title>
+  <style>
+    :root {
+      --ink: #18212f;
+      --muted: #607087;
+      --paper: #fbfaf7;
+      --panel: #ffffff;
+      --line: #dfe5eb;
+      --blue: #2457a6;
+      --blue-soft: #eaf1fb;
+      --teal: #147d73;
+      --teal-soft: #e6f5f2;
+      --amber: #9a6411;
+      --amber-soft: #fff4dc;
+      --red: #a43a3a;
+      --red-soft: #fff0ee;
+      --shadow: 0 12px 32px rgba(24, 33, 47, .08);
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% -5%, #dce9fb 0, transparent 28rem),
+        radial-gradient(circle at 96% 12%, #dcf1ec 0, transparent 24rem),
+        var(--paper);
+      font-family: Inter, "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+      line-height: 1.72;
+    }
+    a { color: var(--blue); }
+    code {
+      padding: .12rem .35rem;
+      border-radius: .35rem;
+      background: #eef2f6;
+      color: #24364d;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: .9em;
+    }
+    .page { width: min(1180px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 72px 0 40px; }
+    .eyebrow {
+      margin-bottom: 12px;
+      color: var(--teal);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 4.15rem);
+      line-height: 1.08;
+      letter-spacing: -.045em;
+    }
+    .lead { max-width: 850px; margin: 22px 0 0; color: var(--muted); font-size: 1.13rem; }
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+    .pill {
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.72);
+      color: var(--muted);
+      font-size: .86rem;
+      font-weight: 700;
+    }
+    .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 28px; }
+    nav {
+      position: sticky;
+      top: 20px;
+      align-self: start;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255,255,255,.86);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    nav strong { display: block; margin-bottom: 8px; font-size: .82rem; letter-spacing: .08em; }
+    nav a {
+      display: block;
+      padding: 7px 9px;
+      border-radius: 8px;
+      color: var(--muted);
+      font-size: .89rem;
+      text-decoration: none;
+    }
+    nav a:hover { background: var(--blue-soft); color: var(--blue); }
+    main { min-width: 0; }
+    section {
+      margin-bottom: 24px;
+      padding: clamp(22px, 4vw, 38px);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255,255,255,.93);
+      box-shadow: var(--shadow);
+    }
+    h2 { margin: 0 0 18px; font-size: 1.55rem; letter-spacing: -.02em; }
+    h3 { margin: 28px 0 10px; font-size: 1.08rem; }
+    p { margin: 10px 0; }
+    .callout {
+      margin: 18px 0;
+      padding: 16px 18px;
+      border-left: 4px solid var(--amber);
+      border-radius: 0 12px 12px 0;
+      background: var(--amber-soft);
+    }
+    .callout.danger { border-color: var(--red); background: var(--red-soft); }
+    .callout.success { border-color: var(--teal); background: var(--teal-soft); }
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .metric {
+      min-height: 126px;
+      padding: 17px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(145deg, #fff, #f5f8fb);
+    }
+    .metric .value { display: block; color: var(--blue); font-size: 1.75rem; font-weight: 850; line-height: 1.1; }
+    .metric .label { display: block; margin-top: 8px; color: var(--muted); font-size: .84rem; }
+    .flow { display: grid; gap: 10px; margin: 20px 0; }
+    .flow-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: stretch; }
+    .step-no {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--blue);
+      color: white;
+      font-weight: 800;
+    }
+    .step {
+      padding: 14px 17px;
+      border: 1px solid #cdd9e8;
+      border-radius: 12px;
+      background: var(--blue-soft);
+    }
+    .step b { display: block; margin-bottom: 3px; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: .91rem; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #34445a; background: #f3f6f9; font-size: .78rem; letter-spacing: .035em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    .split-bar {
+      display: grid;
+      grid-template-columns: 75% 25%;
+      overflow: hidden;
+      margin: 16px 0 8px;
+      border-radius: 12px;
+      color: white;
+      font-weight: 800;
+      text-align: center;
+    }
+    .split-bar div { padding: 14px 8px; }
+    .train { background: var(--blue); }
+    .val { background: var(--teal); }
+    .formula {
+      overflow-x: auto;
+      padding: 17px;
+      border-radius: 12px;
+      background: #182333;
+      color: #f1f5fa;
+      font-family: Cambria, "Times New Roman", serif;
+      text-align: center;
+      font-size: 1.08rem;
+    }
+    .feature-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .feature-group { padding: 15px; border: 1px solid var(--line); border-radius: 12px; background: #fafcfe; }
+    .feature-group b { color: var(--teal); }
+    .architecture { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .arch-card { padding: 18px; border: 1px solid var(--line); border-radius: 14px; }
+    .arch-card h3 { margin-top: 0; }
+    .layers { margin: 12px 0 0; padding: 0; list-style: none; }
+    .layers li { margin: 7px 0; padding: 9px 11px; border-radius: 8px; background: #f2f5f8; font-family: "Cascadia Code", Consolas, monospace; font-size: .84rem; }
+    .results td:nth-child(n+2), .results th:nth-child(n+2) { text-align: right; }
+    .good { color: var(--teal); font-weight: 800; }
+    .bad { color: var(--red); font-weight: 800; }
+    .source-list { padding-left: 20px; color: var(--muted); font-size: .88rem; }
+    footer { padding: 20px 0 64px; color: var(--muted); font-size: .86rem; text-align: center; }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; display: grid; grid-template-columns: repeat(2, 1fr); }
+      nav strong { grid-column: 1 / -1; }
+      .cards { grid-template-columns: repeat(2, 1fr); }
+      .architecture, .feature-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 560px) {
+      .page { width: min(100% - 18px, 1180px); }
+      header { padding-top: 42px; }
+      section { padding: 19px; border-radius: 15px; }
+      .cards { grid-template-columns: 1fr; }
+      nav { grid-template-columns: 1fr; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+    }
+    @media print {
+      body { background: white; }
+      .page { width: 100%; }
+      nav { display: none; }
+      .layout { display: block; }
+      section { break-inside: avoid; box-shadow: none; }
+      header { padding-top: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="page">
+    <div class="eyebrow">Executed pipeline · Qwen3-1.7B → Ternary Bonsai</div>
+    <h1>已執行的 Weight-map<br>完整訓練流程</h1>
+    <p class="lead">從公開 checkpoint 配對、196 個投影矩陣的 ground-truth 抽取，到 layer-level split、A0/A1 訓練、模型組裝與 WikiText-2 perplexity。本文只記錄已經執行過的工作，不把規劃中的實驗寫成完成。</p>
+    <div class="status-strip">
+      <span class="pill">模型：Qwen3-1.7B</span>
+      <span class="pill">目標：Ternary-Bonsai-1.7B-unpacked</span>
+      <span class="pill">量化單位：g128</span>
+      <span class="pill">研究對象：block projection weights</span>
+    </div>
+  </header>
+
+  <div class="page layout">
+    <nav aria-label="頁面導覽">
+      <strong>CONTENTS</strong>
+      <a href="#scope">1. 範圍與術語</a>
+      <a href="#overview">2. 流程總覽</a>
+      <a href="#layers">3. 訓練層數</a>
+      <a href="#data">4. 資料建立</a>
+      <a href="#split">5. 切分與 batch</a>
+      <a href="#features">6. 19 項輸入特徵</a>
+      <a href="#models">7. A0 / A1 架構</a>
+      <a href="#loss">8. Loss 與訓練設定</a>
+      <a href="#selection">9. 驗證與選模</a>
+      <a href="#ablation">10. 校正與 ablation</a>
+      <a href="#assembly">11. 組裝與 PPL</a>
+      <a href="#results">12. 已執行結果</a>
+      <a href="#limits">13. 證據限制</a>
+    </nav>
+
+    <main>
+      <section id="scope">
+        <h2>1. 範圍與術語</h2>
+        <div class="callout danger"><b>最重要的界線：</b>本 repo 沒有重新執行或重現 Prism ML 的 Bonsai 原始 QAT。這裡訓練的是一個輔助 weight-map，學習從 Qwen3 全精度 block weights 預測 Bonsai 公開成品的 ternary code 與 group scale。</div>
+        <p>本文中的「訓練」均指本 repo 的 <b>FP-to-ternary weight-map 訓練</b>，不是 Bonsai 生產訓練。Prism ML 公開了 ternary g128 成品表示，但未公開可重現的資料、optimizer、STE、蒸餾目標或 schedule。</p>
+        <div class="cards">
+          <div class="metric"><span class="value">28</span><span class="label">Qwen3 decoder blocks</span></div>
+          <div class="metric"><span class="value">196</span><span class="label">納入資料的 projection matrices</span></div>
+          <div class="metric"><span class="value">147</span><span class="label">training matrices</span></div>
+          <div class="metric"><span class="value">49</span><span class="label">validation matrices</span></div>
+        </div>
+      </section>
+
+      <section id="overview">
+        <h2>2. 端到端流程總覽</h2>
+        <div class="flow">
+          <div class="flow-row"><div class="step-no">1</div><div class="step"><b>配對公開 checkpoints</b>Qwen3-1.7B 作為 base；Ternary-Bonsai-1.7B-unpacked 作為 observed target。</div></div>
+          <div class="flow-row"><div class="step-no">2</div><div class="step"><b>Lazy tensor extraction</b>直接讀 safetensors index 與 shards，不建立完整模型，也不執行 forward pass。</div></div>
+          <div class="flow-row"><div class="step-no">3</div><div class="step"><b>Family 與 g128 結構驗證</b>確認 target 確實是 ternary group-coded weights；錯誤 checkpoint 或連續權重立即失敗。</div></div>
+          <div class="flow-row"><div class="step-no">4</div><div class="step"><b>恢復 ground truth</b>每 128-column group 以 sign 恢復 code，以非零 magnitude median 恢復 scale。</div></div>
+          <div class="flow-row"><div class="step-no">5</div><div class="step"><b>建立 rule baselines</b>B0 per-tensor absmean、B1 per-group absmean、B2 train-tuned group threshold。</div></div>
+          <div class="flow-row"><div class="step-no">6</div><div class="step"><b>Layer-level split</b>21 個 depths 訓練；7 個 depths 驗證，避免同層元素洩漏。</div></div>
+          <div class="flow-row"><div class="step-no">7</div><div class="step"><b>訓練 A0 / A1</b>預測 B1 上的 code-logit residual 與 log-scale residual。</div></div>
+          <div class="flow-row"><div class="step-no">8</div><div class="step"><b>Validation checkpoint selection</b>每 epoch 以 held-out layers 的 overall code accuracy 選最佳模型。</div></div>
+          <div class="flow-row"><div class="step-no">9</div><div class="step"><b>組裝完整 checkpoint</b>在相同 Bonsai skeleton 中只替換 196 個 block projection weights。</div></div>
+          <div class="flow-row"><div class="step-no">10</div><div class="step"><b>Functional evaluation</b>以 WikiText-2 非重疊 2048-token windows 計算 token-weighted NLL 與 perplexity。</div></div>
+        </div>
+      </section>
+
+      <section id="layers">
+        <h2>3. 「訓練層數」的精確定義</h2>
+        <table>
+          <thead><tr><th>層次</th><th>數量</th><th>如何解讀</th></tr></thead>
+          <tbody>
+            <tr><td>Qwen3 模型深度</td><td><b>28 decoder blocks</b></td><td>編號 0–27；這是原始語言模型的深度。</td></tr>
+            <tr><td>每個 block 的資料矩陣</td><td><b>7 matrices</b></td><td>Q/K/V/O 四個 attention projections，加 gate/up/down 三個 MLP projections。</td></tr>
+            <tr><td>總資料範圍</td><td><b>28 × 7 = 196</b></td><td>所有同名、同形狀的 transformer-block 二維投影矩陣。</td></tr>
+            <tr><td>Training 範圍</td><td><b>21 depths / 147 matrices</b></td><td>depth modulo 4 不等於 3。</td></tr>
+            <tr><td>Validation 範圍</td><td><b>7 depths / 49 matrices</b></td><td>depths 3、7、11、15、19、23、27。</td></tr>
+            <tr><td>A0 自身深度</td><td><b>3-layer trunk</b></td><td>三層 kernel-size-1 Conv1d + GELU；實質為共享的逐 element MLP。</td></tr>
+            <tr><td>A1 自身深度</td><td><b>1 stem + 3 residual blocks</b></td><td>kernel 9 stem，加 dilation 1、4、16 的 column-axis blocks。</td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><b>未納入 weight-map：</b>token embedding、LM head、所有 RMSNorm／Q-K norm。這些元件不能被描述成「本研究已訓練的量化層」。</div>
+      </section>
+
+      <section id="data">
+        <h2>4. Ground-truth pair 建立</h2>
+        <h3>4.1 Tensor 配對</h3>
+        <p>抽取器只接受名稱包含 <code>.layers.</code>、以 <code>.weight</code> 結尾、為 2-D，且 base／target 同名同形狀的 tensors。每個 matrix 獨立輸出為 safetensors shard。</p>
+        <h3>4.2 Family assertion</h3>
+        <p>Target tensor reshape 為 <code>[out_features, in_features/128, 128]</code>。每組非零 magnitude 的最大相對 spread 必須 ≤ 2%；exact-zero fraction ≤ 0.001 判為 binary，≥ 0.02 判為 ternary。門檻是資料驗證政策，不是 Prism ML 的量化公式。</p>
+        <h3>4.3 Code 與 scale 恢復</h3>
+        <div class="formula">T<sub>i</sub> = sign(G<sub>i</sub>) &nbsp;&nbsp;·&nbsp;&nbsp; ŝ<sub>g</sub> = median({ |G<sub>i</sub>| : G<sub>i</sub> ≠ 0, i ∈ g })</div>
+        <p>全零 group 的 scale 設為 0，並從 scale loss 遮蔽。若任何非零 magnitude 相對於 group median 的偏差超過 2%，抽取立即停止。</p>
+        <table>
+          <thead><tr><th>Shard 欄位</th><th>資料型別／內容</th><th>用途</th></tr></thead>
+          <tbody>
+            <tr><td><code>base</code></td><td>Qwen3 原始浮點矩陣</td><td>模型輸入</td></tr>
+            <tr><td><code>code</code></td><td>int8，{-1, 0, +1}</td><td>三分類 ground truth</td></tr>
+            <tr><td><code>scales</code></td><td>float32，每 g128 一個</td><td>scale regression ground truth</td></tr>
+            <tr><td>row / column stats</td><td>absmean 與 L2 norm</td><td>輸入特徵</td></tr>
+            <tr><td><code>manifest.csv</code></td><td>layer、type、proj id、depth、shape、sparsity、reconstruction error</td><td>資料索引與稽核</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="split">
+        <h2>5. Layer-level split 與 batch 組成</h2>
+        <div class="split-bar"><div class="train">Training · 21 depths · 147 matrices</div><div class="val">Validation<br>7 · 49</div></div>
+        <p><b>規則：</b><code>depth % 4 == 3</code> 為 validation，其餘為 training。同一 decoder depth 的七個 projections 不會跨 split。</p>
+        <h3>Training batch</h3>
+        <table>
+          <tbody>
+            <tr><th>隨機單位</th><td>先選 1 個 training matrix，再抽 64 個 rows，最後抽 group-aligned column segment。</td></tr>
+            <tr><th>Base tensor shape</th><td><code>[64, 512]</code></td></tr>
+            <tr><th>Group size</th><td>128 columns；每個 row segment 含 4 groups。</td></tr>
+            <tr><th>每 batch code targets</th><td>64 × 512 = <b>32,768</b> elements。</td></tr>
+            <tr><th>每 batch scale targets</th><td>64 × 4 = <b>256</b> groups。</td></tr>
+          </tbody>
+        </table>
+        <h3>Validation sweep</h3>
+        <p>每個 held-out matrix 固定抽 128 rows，並以 512-column windows 掃描完整 column range。固定抽樣使不同 epochs 的結果可直接比較。</p>
+      </section>
+
+      <section id="features">
+        <h2>6. 每個 weight element 的 19 個輸入 channels</h2>
+        <div class="feature-grid">
+          <div class="feature-group"><b>Element / group · 4</b><br>signed weight ÷ group absmean、absolute ratio、group 內 magnitude percentile rank、weight ÷ group absmax。</div>
+          <div class="feature-group"><b>Group statistics · 3</b><br>group absmean ÷ tensor absmean、group absmax ÷ group absmean、group std ÷ group absmean。</div>
+          <div class="feature-group"><b>Row / column · 4</b><br>row absmean、column absmean、normalized row L2 norm、normalized column L2 norm。</div>
+          <div class="feature-group"><b>Conditioning · 8</b><br>normalized decoder depth，加七種 projection identity one-hot。</div>
+        </div>
+        <p>適合表示為正值比例的 statistics 取 log-ratio 並 clamp 至 <code>[-8, 8]</code>。Signed ratio、percentile rank、depth 與 one-hot 不取 log。</p>
+        <div class="callout success"><b>Inductive bias：</b>模型允許使用 quantization group、同 row 的 column locality、跨 rows 彙整出的 column statistics；刻意不編碼 output-row adjacency，因為神經元列順序不具有影像像素式鄰近語意。</div>
+      </section>
+
+      <section id="models">
+        <h2>7. Weight-map 架構</h2>
+        <div class="architecture">
+          <article class="arch-card">
+            <h3>A0 · ContextMLP</h3>
+            <p>Null-hypothesis model：每個 element 獨立處理其 19 維特徵；不學習相鄰 columns 的交互作用。</p>
+            <ul class="layers">
+              <li>Conv1d(19 → 128, kernel=1) + GELU</li>
+              <li>Conv1d(128 → 128, kernel=1) + GELU</li>
+              <li>Conv1d(128 → 128, kernel=1) + GELU</li>
+              <li>zero-init code / scale heads</li>
+            </ul>
+          </article>
+          <article class="arch-card">
+            <h3>A1 · GroupConv1D</h3>
+            <p>沿同一 output row 的 column axis 建模；dilation 16 的單層覆蓋約 129 columns，接近一個 g128。</p>
+            <ul class="layers">
+              <li>Conv1d(19 → 128, kernel=9) + GELU</li>
+              <li>Residual Conv1d(kernel=9, dilation=1)</li>
+              <li>Residual Conv1d(kernel=9, dilation=4)</li>
+              <li>Residual Conv1d(kernel=9, dilation=16)</li>
+              <li>zero-init code / scale heads</li>
+            </ul>
+          </article>
+        </div>
+        <h3>Decision-space residual</h3>
+        <div class="formula">ẑ = 4 · one_hot(T<sup>B1</sup>) + Δz<sub>θ</sub> &nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp; log ŝ = log s<sup>B1</sup> + Δℓ<sub>θ</sub></div>
+        <p>兩個 heads 均 zero-initialized，因此未訓練模型精確輸出 B1。Scale residual 在原空間等價於 <b>ŝ = s<sup>B1</sup> exp(Δℓ)</b>，即對 baseline scale 做乘法修正。</p>
+      </section>
+
+      <section id="loss">
+        <h2>8. Loss、optimizer 與正式超參數</h2>
+        <div class="formula">ℒ = ℒ<sub>CE</sub>(T̂, T) + 0.1 · ℒ<sub>Huber</sub>(log ŝ, log s)</div>
+        <p>Code loss 是 {-1, 0, +1} 三分類 cross-entropy。Scale loss 只在 true scale &gt; 0 的 groups 上計算。正式 runs 使用 <code>hard_weight=1.0</code>，不額外放大 B1 錯誤位置。</p>
+        <table>
+          <thead><tr><th>設定</th><th>值</th><th>解讀</th></tr></thead>
+          <tbody>
+            <tr><td>Epochs</td><td>20</td><td>每個 epoch 結束做一次 held-out-layer validation。</td></tr>
+            <tr><td>Steps / epoch</td><td>500</td><td>總計 10,000 optimizer updates。</td></tr>
+            <tr><td>Batch / segment</td><td>64 rows / 512 columns</td><td>每 row 四個 g128。</td></tr>
+            <tr><td>Hidden size</td><td>128</td><td>A0 與 A1 的 trunk width。</td></tr>
+            <tr><td>Optimizer</td><td>AdamW</td><td>weight decay 0.01。</td></tr>
+            <tr><td>Learning rate</td><td>3 × 10<sup>−4</sup></td><td>另有已執行的 LR calibration runs，見後節。</td></tr>
+            <tr><td>Scheduler</td><td>Cosine annealing</td><td>T<sub>max</sub> = 10,000 steps。</td></tr>
+            <tr><td>Seed</td><td>0</td><td>目前正式流程是 single-seed。</td></tr>
+            <tr><td>Scale weight</td><td>0.1</td><td>相對 code CE 的 loss coefficient。</td></tr>
+            <tr><td>Class weights</td><td>[1, 1, 1]</td><td>三個 code classes 預設等權。</td></tr>
+            <tr><td>Augmentation</td><td>關閉</td><td>正式預設未啟用 rescale／sign flip／noise。</td></tr>
+          </tbody>
+        </table>
+        <div class="callout"><b>這些是 weight-map 超參數，不是 Bonsai 生產超參數。</b>論文中應放在「Proposed mapping model training」而不是「Bonsai quantization training」。</div>
+      </section>
+
+      <section id="selection">
+        <h2>9. Validation 指標與 checkpoint selection</h2>
+        <p>每個 epoch 對 49 個 held-out matrices 執行固定 validation sweep，逐 element／group 累積：</p>
+        <table>
+          <thead><tr><th>指標</th><th>定義與角色</th></tr></thead>
+          <tbody>
+            <tr><td>Overall code accuracy</td><td>所有 validation code positions 的正確率；<b>正式選模標準</b>。</td></tr>
+            <tr><td>B1 baseline accuracy</td><td>同一 validation sample 上的 per-group absmean baseline。</td></tr>
+            <tr><td>Hard fraction</td><td>B1 與 Bonsai ground truth 不一致的位置比例。</td></tr>
+            <tr><td>Hard accuracy</td><td>模型在 hard subset 上修正成功的比例；只作診斷，不作正式選模。</td></tr>
+            <tr><td>Scale relative error</td><td>|ŝ − s| / s，只對 true scale &gt; 0 的 groups。</td></tr>
+          </tbody>
+        </table>
+        <p>只有當本 epoch 的 overall validation accuracy 創新高時，才保存 <code>best_{arch}.pt</code> 與對應的 per-layer report。</p>
+      </section>
+
+      <section id="ablation">
+        <h2>10. 已執行的校正與 ablation</h2>
+        <p>以下工作用來確認訓練框架與策略，與正式流程分開報告：</p>
+        <table>
+          <thead><tr><th>實驗</th><th>目的</th><th>結論</th></tr></thead>
+          <tbody>
+            <tr><td>Single-tensor overfit</td><td>確認資料、features、heads、loss 與 optimizer 能在真實 tensor 上工作。</td><td>屬 framework correctness / learnability ceiling 檢查。</td></tr>
+            <tr><td><code>hard_weight=4</code></td><td>強迫模型優先修正 B1 錯誤位置。</td><td>Hard accuracy 約 0.73，但 overall 約 0.45，低於 B1 約 0.61；因破壞 easy positions 而捨棄。</td></tr>
+            <tr><td>LR sweep</td><td>比較預設 3e−4 與已排程的 1e−3、3e−3 points。</td><td>正式方法仍以文件化的 3e−4 設定報告；各 run artifacts 應另行歸檔。</td></tr>
+            <tr><td>A0 vs A1</td><td>檢驗 handcrafted statistics 與 column-locality 的額外價值。</td><td>A1 僅非常小幅領先 A0，局部卷積訊號有限。</td></tr>
+            <tr><td>Binary-pair runs</td><td>同一框架對 binary Bonsai family 的適用性檢查。</td><td>已排入並執行流程；本文核心量化結果仍聚焦 ternary pair。</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="assembly">
+        <h2>11. 完整模型組裝與 functional evaluation</h2>
+        <p>所有 variants 使用同一個真實 Bonsai skeleton，因此 tokenizer、embedding、norms 與 LM head 固定；只替換 manifest 中的 196 個 block projection weights。</p>
+        <table>
+          <thead><tr><th>Mode</th><th>替換後的 block weights</th></tr></thead>
+          <tbody>
+            <tr><td><code>fp</code></td><td>Qwen3 base block weights；因此是 Bonsai 外殼加 Qwen3 blocks 的 hybrid control。</td></tr>
+            <tr><td><code>oracle</code></td><td>恢復出的 Bonsai true code × true scale。</td></tr>
+            <tr><td><code>naive_b0</code></td><td>Qwen3 per-tensor absmean code × per-tensor kept-magnitude mean scale。</td></tr>
+            <tr><td><code>naive_b1</code></td><td>Qwen3 per-group-128 absmean code × group baseline scale。</td></tr>
+            <tr><td><code>predicted</code></td><td>最佳 A1 weight-map 預測 code × predicted group scale。</td></tr>
+          </tbody>
+        </table>
+        <h3>WikiText-2 PPL protocol</h3>
+        <p>使用 raw test split，串接非空文本後切成不重疊的 2048-token windows；對 shifted targets 計算 token-weighted mean NLL，再取 <b>PPL = exp(NLL)</b>。CLI 預設 batch size 4、最多 200 windows；保存的實跑使用 145 個 windows。</p>
+      </section>
+
+      <section id="results">
+        <h2>12. 已執行結果</h2>
+        <h3>12.1 Rule baselines · held-out layers</h3>
+        <table class="results">
+          <thead><tr><th>方法</th><th>Overall accuracy</th><th>Hard accuracy</th><th>補充</th></tr></thead>
+          <tbody>
+            <tr><td>B0 · per-tensor absmean</td><td>0.606</td><td>—</td><td>簡單 tensor-wide 規則</td></tr>
+            <tr><td>B1 · per-group absmean</td><td>0.606</td><td>0（定義上）</td><td>Hard fraction = 0.394</td></tr>
+            <tr><td>B2 · tuned threshold</td><td class="good">0.618</td><td>0.193</td><td>Train-tuned τ = 0.775</td></tr>
+          </tbody>
+        </table>
+        <h3>12.2 Learned maps · held-out layers</h3>
+        <table class="results">
+          <thead><tr><th>模型</th><th>Overall accuracy</th><th>Hard accuracy</th><th>Scale relative error</th></tr></thead>
+          <tbody>
+            <tr><td>A0 · ContextMLP</td><td>0.623</td><td>0.187</td><td>0.128</td></tr>
+            <tr><td>A1 · GroupConv1D</td><td class="good">0.624</td><td class="good">0.194</td><td class="good">0.127</td></tr>
+          </tbody>
+        </table>
+        <p>相較最佳 rule baseline，A1 的 overall accuracy 只增加約 <b>0.6 percentage point</b>。這是小幅增益，不能宣稱局部映射已充分還原 Bonsai。</p>
+        <h3>12.3 Functional perplexity</h3>
+        <table class="results">
+          <thead><tr><th>Variant</th><th>PPL</th><th>解讀</th></tr></thead>
+          <tbody>
+            <tr><td>oracle</td><td class="good">17.7</td><td>真實 Bonsai block endpoint</td></tr>
+            <tr><td>fp hybrid</td><td>27.0</td><td>不是原生 Qwen3 PPL</td></tr>
+            <tr><td>predicted</td><td>145,227</td><td>優於兩個 naive controls，但仍遠離 oracle</td></tr>
+            <tr><td>naive_b0</td><td class="bad">349,604</td><td>per-tensor naive conversion</td></tr>
+            <tr><td>naive_b1</td><td class="bad">879,504</td><td>per-group naive conversion</td></tr>
+          </tbody>
+        </table>
+        <div class="callout danger"><b>結論邊界：</b>predicted mapping 雖改善 naive controls，仍比 oracle 差數個數量級；目前不能宣稱已產生可用的 calibration-free ternary language model。</div>
+      </section>
+
+      <section id="limits">
+        <h2>13. 證據、重現性與論文揭露</h2>
+        <div class="callout"><b>Artifact 狀態：</b>上述 aggregate numbers 來自 repo 內保存的實跑紀錄；目前本機工作樹未包含對應 raw CSV、完整 logs 與 model checkpoints。因此結果屬於「文件可追溯、原始 artifacts 待歸檔」。</div>
+        <ul>
+          <li>目前核心結果是單一 1.7B ternary pair、單一 vendor／recipe、single seed。</li>
+          <li>Validation 是同模型內 held-out depths，不是跨 scale 或跨 architecture。</li>
+          <li>Weight-map 只覆蓋 196 個 block projections，不覆蓋 embedding、LM head 或 norms。</li>
+          <li>PPL variants 共用 Bonsai skeleton；<code>fp</code> 是 hybrid control，不是原生 Qwen3。</li>
+          <li>靜態 code accuracy 不等於 activation similarity，也不保證語言模型功能。</li>
+        </ul>
+        <h3>主要 repo 證據</h3>
+        <ol class="source-list">
+          <li><code>weight2ternary/data_utils/extract.py</code>：matched tensor extraction、code／scale recovery、manifest。</li>
+          <li><code>weight2ternary/data_utils/sampler.py</code>：depth split、training sampling、validation sweep。</li>
+          <li><code>weight2ternary/data_utils/features.py</code>：19-channel feature contract。</li>
+          <li><code>weight2ternary/model_utils/build_model.py</code>：A0／A1 與 residual heads。</li>
+          <li><code>weight2ternary/model_utils/losses.py</code>：CE + log-scale Huber loss。</li>
+          <li><code>tools/train_weight_map.py</code>：optimizer、scheduler、超參數與 checkpoint selection。</li>
+          <li><code>weight2ternary/eval_utils/assemble.py</code>、<code>tools/eval_perplexity.py</code>：組裝與 PPL。</li>
+          <li><code>docs/MASTER_PLAN_WEIGHT_MAP.md</code>：保存的 G1、G2 與 PPL aggregate results。</li>
+        </ol>
+      </section>
+    </main>
+  </div>
+
+  <footer class="page">Qwen3 vs. Ternary Bonsai · Executed Weight-map Training Pipeline · 2026-08-22</footer>
+</body>
+</html>

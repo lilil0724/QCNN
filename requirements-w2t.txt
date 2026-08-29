@@ -1,0 +1,4 @@
+# Additional dependencies for the weight2ternary package (on top of
+# requirements.txt). Everything here already ships in the `asr` conda env.
+safetensors
+huggingface_hub
