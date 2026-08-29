@@ -1,5 +1,5 @@
 # qwen3-ternary-bonsai-analysis
-
+/
 Focused analysis of `Qwen/Qwen3-1.7B` (base, full-precision) vs.
 `prism-ml/Ternary-Bonsai-1.7B-unpacked` (the same architecture, ternary-QAT-trained) -
 the cleanest same-architecture ternary-QAT comparison available. Spun off from the
