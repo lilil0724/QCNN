@@ -23,7 +23,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-os.environ.setdefault('HF_HOME', '/hdd/edwin/support/hf')
+os.environ.setdefault('HF_HOME', '/home/pcs5060ti/Desktop/hf')
 os.environ.setdefault('HF_HUB_CACHE', os.path.join(os.environ['HF_HOME'], 'hub'))
 
 import torch

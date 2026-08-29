@@ -35,9 +35,9 @@ repo (`QuantizedASR`) that could be relevant later.
 - Conda env `asr` already has every dependency this repo needs (`torch`,
   `transformers`, `numpy`, `pandas`, `matplotlib` - see `requirements.txt`):
   `source /home/ubuntu/miniconda3/etc/profile.d/conda.sh && conda activate asr`.
-- **Never let anything download to the home directory.** Set explicitly on every
-  command that touches the HF Hub: `HF_HOME=/hdd/edwin/support/hf
-  HF_HUB_CACHE=/hdd/edwin/support/hf/hub`. Both `Qwen/Qwen3-1.7B` and
+- Use the configured cache for every command that touches the HF Hub:
+  `HF_HOME=/home/pcs5060ti/Desktop/hf
+  HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub`. Both `Qwen/Qwen3-1.7B` and
   `prism-ml/Ternary-Bonsai-1.7B-unpacked` are already cached there as of 2026-07-18.
 - The source repo, `QuantizedASR`, lives alongside this one at
   `/media/samsung/projects/QuantizedASR` - useful for cross-referencing history (see

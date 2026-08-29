@@ -4,7 +4,7 @@ Examples
 --------
 Analyse the standard Qwen3-1.7B checkpoint::
 
-    HF_HOME=/approved/hf HF_HUB_CACHE=/approved/hf/hub \
+    HF_HOME=/home/pcs5060ti/Desktop/hf HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub \
     python tools/analyze_weight_distribution.py --model_id Qwen/Qwen3-1.7B
 
 Analyse a local checkpoint, limiting the report to attention projections::

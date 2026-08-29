@@ -23,9 +23,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Hub traffic must never fall back to the remote machine's home directory.
-os.environ.setdefault('HF_HOME', '/hdd/edwin/support/hf')
-os.environ.setdefault('HF_HUB_CACHE', '/hdd/edwin/support/hf/hub')
+# Keep all Hub traffic in the configured Hugging Face cache directory.
+os.environ.setdefault('HF_HOME', '/home/pcs5060ti/Desktop/hf')
+os.environ.setdefault('HF_HUB_CACHE', '/home/pcs5060ti/Desktop/hf/hub')
 
 import pandas as pd
 import torch

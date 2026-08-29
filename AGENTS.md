@@ -53,7 +53,7 @@ when available, and include relevant plots or output excerpts for behavior chang
 
 ## Data, Models, and Safety
 
-Never download Hugging Face artifacts to a home directory. Set `HF_HOME` and
-`HF_HUB_CACHE` explicitly to the approved large-volume cache before Hub operations.
+Use `HF_HOME=/home/pcs5060ti/Desktop/hf` and
+`HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub` explicitly before Hub operations.
 Keep derived pair shards outside the repository, document exclusions or retries, and
 verify GPU-backed conclusions with actual runs rather than code inspection alone.

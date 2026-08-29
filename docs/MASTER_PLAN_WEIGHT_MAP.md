@@ -189,7 +189,7 @@ by layer/depth/model-scale, never by random element, and every claim must be
 phrased per-recipe until section 6.4's own-QAT pairs add recipe diversity.
 
 Storage: bases + unpacked QAT checkpoints for 1.7B/4B/8B ~ (3.4+8+16)*2 GB ~ 55 GB
-in bf16 on `/hdd/edwin/support/hf` (639 GB free - fine; `/media/samsung` is 97% full,
+in bf16 on `/home/pcs5060ti/Desktop/hf` (`/media/samsung` is 97% full,
 put nothing large there). Extracted patch tensors: store as memory-mapped safetensors
 shards under `/hdd/edwin/qwen3vsbonsai/patches/`.
 

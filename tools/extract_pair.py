@@ -23,9 +23,9 @@ Synthetic self-test (no downloads, validates derive/extract logic only)::
 
     python tools/extract_pair.py --synthetic
 
-HF cache discipline (this box): downloads go to /hdd/edwin/support/hf - NEVER the
-home directory. This script sets HF_HOME/HF_HUB_CACHE to that location itself when
-they aren't already set, so a bare invocation is safe.
+HF cache discipline (this box): downloads go to /home/pcs5060ti/Desktop/hf. This
+script sets HF_HOME/HF_HUB_CACHE to that location itself when they aren't already
+set, so a bare invocation uses the configured cache.
 """
 import argparse
 import os
@@ -34,7 +34,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-DEFAULT_HF_HOME = '/hdd/edwin/support/hf'
+DEFAULT_HF_HOME = '/home/pcs5060ti/Desktop/hf'
 os.environ.setdefault('HF_HOME', DEFAULT_HF_HOME)
 os.environ.setdefault('HF_HUB_CACHE', os.path.join(os.environ['HF_HOME'], 'hub'))
 

@@ -32,8 +32,9 @@ python tools/compare_qat_weights.py \
 python tools/compare_qat_weights.py --synthetic
 ```
 
-Set `HF_HOME`/`HF_HUB_CACHE` explicitly on this box before running anything that
-touches the HF Hub - do not let downloads fall through to the home directory.
+The default Hugging Face cache for this box is `HF_HOME=/home/pcs5060ti/Desktop/hf`
+with `HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub`. The tools set these defaults
+when the variables are not already defined.
 
 ## Layout
 

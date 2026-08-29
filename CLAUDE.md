@@ -112,11 +112,11 @@ pattern-matching the symptom.
 ## 7. HF cache and data storage on this server
 
 - **All HF Hub downloads (models, datasets) go to the designated cache at
-  `/hdd/edwin/support/hf`** - set `HF_HOME=/hdd/edwin/support/hf` and
-  `HF_HUB_CACHE=/hdd/edwin/support/hf/hub` explicitly on every command that touches
+  `/home/pcs5060ti/Desktop/hf`** - set `HF_HOME=/home/pcs5060ti/Desktop/hf` and
+  `HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub` explicitly on every command that touches
   the Hub (env vars don't persist across non-interactive shells; this repo's tools
   under `tools/` also set these as defaults themselves when unset). Never let
-  anything fall through to the home directory, and don't put large artifacts on
+  anything fall through to another cache location, and don't put large artifacts on
   `/media/samsung` either (it is nearly full) - `/hdd` is the big disk.
 - Derived data (extracted pair shards etc.) lives under `/hdd/edwin/qwen3vsbonsai/`
   (e.g. `pairs/<pair slug>/` from `tools/extract_pair.py`).
