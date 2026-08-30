@@ -19,7 +19,7 @@ selection by overall accuracy; hard_weight stays available as an ablation knob.
 Usage
 -----
     python tools/train_weight_map.py \
-        --pair_dir /hdd/edwin/qwen3vsbonsai/pairs/Qwen_Qwen3-1.7B__prism-ml_Ternary-Bonsai-1.7B-unpacked \
+        --pair_dir /home/pcs5060ti/Desktop/qcnn_data/pairs/Qwen_Qwen3-1.7B__prism-ml_Ternary-Bonsai-1.7B-unpacked \
         --arch context_mlp --serial 1
 
 Outputs under --results_dir/serial{serial}/: train_log.csv (per-epoch), val_per_layer.csv

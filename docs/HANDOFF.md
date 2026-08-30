@@ -39,6 +39,12 @@ repo (`QuantizedASR`) that could be relevant later.
   `HF_HOME=/home/pcs5060ti/Desktop/hf
   HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub`. Both `Qwen/Qwen3-1.7B` and
   `prism-ml/Ternary-Bonsai-1.7B-unpacked` are already cached there as of 2026-07-18.
+- Current extracted-pair root (updated 2026-08-30):
+  `/home/pcs5060ti/Desktop/qcnn_data/pairs/`. New pair extraction, baseline,
+  prediction-model training, assembly, and decomposition runs should use pair
+  directories under this root. Older paths under `/hdd/edwin/qwen3vsbonsai/pairs/`
+  in historical result notes describe where those runs originally lived; they are
+  not the current default.
 - The source repo, `QuantizedASR`, lives alongside this one at
   `/media/samsung/projects/QuantizedASR` - useful for cross-referencing history (see
   below) but this repo does not depend on it (no shared code, confirmed at copy time -

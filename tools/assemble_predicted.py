@@ -10,7 +10,7 @@ downstream perplexity differences isolate the block weights.
 Usage
 -----
     python tools/assemble_predicted.py \
-        --pair_dir /hdd/edwin/qwen3vsbonsai/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked \
+        --pair_dir /home/pcs5060ti/Desktop/qcnn_data/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked \
         --bonsai_model_id prism-ml/Ternary-Bonsai-1.7B-unpacked \
         --modes fp oracle naive_b1 predicted \
         --weight_map_ckpt results/serial4/best_group_conv.pt

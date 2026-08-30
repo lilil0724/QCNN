@@ -19,7 +19,7 @@ evaluates on the SAME entries. Two modes, answering two different questions:
 Usage (on an extracted pair)
 ----------------------------
     python tools/overfit_single_tensor.py \
-        --pair_dir /hdd/edwin/qwen3vsbonsai/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked \
+        --pair_dir /home/pcs5060ti/Desktop/qcnn_data/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked \
         --layer_index 0 --position_mode embed
 """
 import argparse

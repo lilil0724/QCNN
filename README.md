@@ -36,6 +36,18 @@ The default Hugging Face cache for this box is `HF_HOME=/home/pcs5060ti/Desktop/
 with `HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub`. The tools set these defaults
 when the variables are not already defined.
 
+Extracted checkpoint pairs are stored under
+`/home/pcs5060ti/Desktop/qcnn_data/pairs/` by default.
+
+Load all experiment paths into the current shell with:
+
+```bash
+source scripts/setup_qcnn_env.sh
+```
+
+If more than one extracted pair exists, pass the desired pair directory as the
+first argument.
+
 ## Layout
 
 - `tools/compare_qat_weights.py` - the main comparison tool (per-layer sparsity, sign

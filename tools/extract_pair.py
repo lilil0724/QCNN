@@ -38,7 +38,7 @@ DEFAULT_HF_HOME = '/home/pcs5060ti/Desktop/hf'
 os.environ.setdefault('HF_HOME', DEFAULT_HF_HOME)
 os.environ.setdefault('HF_HUB_CACHE', os.path.join(os.environ['HF_HOME'], 'hub'))
 
-DEFAULT_PAIRS_ROOT = '/hdd/edwin/qwen3vsbonsai/pairs'
+DEFAULT_PAIRS_ROOT = '/home/pcs5060ti/Desktop/qcnn_data/pairs'
 
 
 def default_out_dir(base_model_id: str, qat_model_id: str) -> str:

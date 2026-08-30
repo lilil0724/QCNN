@@ -10,7 +10,7 @@ overwritten in memory before each evaluation; no assembled checkpoint is saved.
 Example
 -------
     python tools/eval_oracle_decomposition.py \
-        --pair_dir /hdd/edwin/qwen3vsbonsai/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked \
+        --pair_dir /home/pcs5060ti/Desktop/qcnn_data/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked \
         --modes oracle_code_oracle_scale baseline_code_baseline_scale \
                 predicted_code_oracle_scale predicted_code_predicted_scale \
         --weight_map_ckpt results/serial4/best_group_conv.pt \

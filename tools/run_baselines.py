@@ -14,7 +14,7 @@ headroom exists above the trivial rules, and where (layer type x depth) it lives
 Usage
 -----
     python tools/run_baselines.py \
-        --pair_dir /hdd/edwin/qwen3vsbonsai/pairs/Qwen_Qwen3-1.7B__prism-ml_Ternary-Bonsai-1.7B-unpacked
+        --pair_dir /home/pcs5060ti/Desktop/qcnn_data/pairs/Qwen_Qwen3-1.7B__prism-ml_Ternary-Bonsai-1.7B-unpacked
 
 Synthetic self-test (no extracted pair needed)::
 

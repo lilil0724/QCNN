@@ -6,8 +6,8 @@
 # original plan - these are the SAME experiments, resumed, not new ones.
 set -u
 cd "$(dirname "$0")/.."
-PAIR_T=/hdd/edwin/qwen3vsbonsai/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked
-PAIR_B=/hdd/edwin/qwen3vsbonsai/pairs/Qwen_Qwen3-1.7B_prism-ml_Bonsai-1.7B-unpacked
+PAIR_T=/home/pcs5060ti/Desktop/qcnn_data/pairs/Qwen_Qwen3-1.7B_prism-ml_Ternary-Bonsai-1.7B-unpacked
+PAIR_B=/home/pcs5060ti/Desktop/qcnn_data/pairs/Qwen_Qwen3-1.7B_prism-ml_Bonsai-1.7B-unpacked
 STATUS=results/poc_step4.status
 
 stage() { echo "$1=$2" >> $STATUS; }
