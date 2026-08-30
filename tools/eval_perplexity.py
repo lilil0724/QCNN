@@ -32,7 +32,7 @@ import torch
 
 def load_eval_tokens(tokenizer, seq_len: int, max_windows: int):
     from datasets import load_dataset
-    ds = load_dataset('wikitext', 'wikitext-2-raw-v1', split='test')
+    ds = load_dataset('Salesforce/wikitext', 'wikitext-2-raw-v1', split='test')
     text = '\n\n'.join(t for t in ds['text'] if t.strip())
     ids = tokenizer(text, return_tensors='pt').input_ids[0]
     n_windows = min(ids.numel() // seq_len, max_windows)

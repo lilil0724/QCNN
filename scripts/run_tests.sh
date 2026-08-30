@@ -8,7 +8,8 @@ cd "$(dirname "$0")/.."
 
 for t in tests/test_family_check.py tests/test_extract.py tests/test_baselines.py \
          tests/test_models.py tests/test_augment.py tests/test_sampler.py \
-         tests/test_overfit.py tests/test_oracle_decomposition.py; do
+         tests/test_overfit.py tests/test_oracle_decomposition.py \
+         tests/test_eval_perplexity.py; do
     echo "== $t =="
     python "$t"
 done
