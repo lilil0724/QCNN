@@ -23,7 +23,7 @@ Usage
         --arch context_mlp --serial 1
 
 Outputs under --results_dir/serial{serial}/: train_log.csv (per-epoch), val_per_layer.csv
-(final), best_{arch}.pt (state dict at best hard accuracy), args.txt.
+(final), best_{arch}.pt (state dict at best overall accuracy), args.txt.
 
 Re-runs of the same experiment should reuse the same --serial (see CLAUDE.md: new
 serials for re-runs make completed runs impossible to audit); different experiments
@@ -101,12 +101,22 @@ def evaluate(model, sampler, device, rows_per_layer, group_size):
 def train(args):
     from weight2ternary.data_utils.augment import (additive_noise, random_group_rescale,
                                                    random_sign_flip)
+    from weight2ternary.data_utils.features import FEATURE_NAMES, feature_mask
     from weight2ternary.data_utils.sampler import PairSegmentSampler, rebuild_features
-    from weight2ternary.model_utils.build_model import build_model, predict_code_and_scales
+    from weight2ternary.model_utils.build_model import (build_model,
+                                                        group_conv_context_halo,
+                                                        predict_code_and_scales)
     from weight2ternary.model_utils.losses import WeightMapLoss
 
     device = args.device if torch.cuda.is_available() or args.device == 'cpu' else 'cpu'
     torch.manual_seed(args.seed)
+
+    context_halo = (group_conv_context_halo(args.group_size)
+                    if args.arch == 'group_conv' else 0)
+    if args.augment and context_halo:
+        raise ValueError('--augment is not supported with GroupConv context halos: '
+                         'the halo and center would need one joint label-consistent '
+                         'transformation. Run feature ablations without augmentation.')
 
     run_dir = os.path.join(args.results_dir, f'serial{args.serial}')
     os.makedirs(run_dir, exist_ok=True)
@@ -114,14 +124,18 @@ def train(args):
         f.write('\n'.join(f'{k}={v}' for k, v in sorted(vars(args).items())))
 
     train_sampler = PairSegmentSampler(args.pair_dir, 'train', args.segment_len,
-                                       args.batch_size, args.group_size, seed=args.seed)
+                                       args.batch_size, args.group_size, seed=args.seed,
+                                       context_halo=context_halo)
     val_sampler = PairSegmentSampler(args.pair_dir, 'val', args.segment_len,
-                                     args.batch_size, args.group_size, seed=args.seed)
+                                     args.batch_size, args.group_size, seed=args.seed,
+                                     context_halo=context_halo)
     print(f'train layers: {len(train_sampler.manifest)}  '
-          f'val layers: {len(val_sampler.manifest)}  device: {device}')
+          f'val layers: {len(val_sampler.manifest)}  device: {device}  '
+          f'feature_set: {args.feature_set}  context_halo: {context_halo}')
 
     model = build_model(args.arch, hidden=args.hidden,
-                        group_size=args.group_size).to(device)
+                        group_size=args.group_size,
+                        feature_set=args.feature_set).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f'{args.arch}: {n_params / 1e6:.2f}M params')
 
@@ -175,6 +189,11 @@ def train(args):
             best_acc = agg['val_accuracy']
             torch.save({'arch': args.arch, 'hidden': args.hidden,
                         'group_size': args.group_size,
+                        'feature_set': args.feature_set,
+                        'feature_names': list(FEATURE_NAMES),
+                        'feature_mask': feature_mask(args.feature_set).tolist(),
+                        'selection_metric': 'val_accuracy',
+                        'context_halo': context_halo,
                         'state_dict': model.state_dict()}, best_path)
             val_df.to_csv(os.path.join(run_dir, 'val_per_layer.csv'), index=False)
             marker = '  <- best'
@@ -193,11 +212,15 @@ def train(args):
 
 
 def parse_cli_args():
+    from weight2ternary.data_utils.features import FEATURE_SETS
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--pair_dir', type=str, required=True)
     parser.add_argument('--arch', type=str, default='context_mlp',
                         choices=['context_mlp', 'group_conv'])
+    parser.add_argument('--feature_set', type=str, default='full',
+                        choices=list(FEATURE_SETS),
+                        help='Named 19-channel input mask; model shape stays fixed.')
     parser.add_argument('--hidden', type=int, default=128)
     parser.add_argument('--epochs', type=int, default=20)
     parser.add_argument('--steps_per_epoch', type=int, default=500)

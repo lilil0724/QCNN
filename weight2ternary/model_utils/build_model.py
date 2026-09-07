@@ -23,10 +23,37 @@ import torch
 import torch.nn as nn
 
 from ..data_utils.family_check import DEFAULT_GROUP_SIZE
-from ..data_utils.features import NUM_FEATURES
+from ..data_utils.features import NUM_FEATURES, feature_mask
 
 BASELINE_LOGIT_MARGIN = 4.0
 NUM_CODE_CLASSES = 3  # {-1, 0, +1} -> class index = code + 1
+GROUP_CONV_RECEPTIVE_RADIUS = 88
+
+
+def group_conv_context_halo(group_size: int) -> int:
+    """Smallest group-aligned halo covering GroupConv1D's receptive radius."""
+    return ((GROUP_CONV_RECEPTIVE_RADIUS + group_size - 1) // group_size) * group_size
+
+
+class _FeatureMaskMixin:
+
+    def _init_feature_mask(self, num_features: int, feature_set: str):
+        if num_features != NUM_FEATURES and feature_set != 'full':
+            raise ValueError('Named feature sets require the standard '
+                             f'{NUM_FEATURES}-channel input.')
+        mask = (feature_mask(feature_set) if num_features == NUM_FEATURES
+                else torch.ones(num_features, dtype=torch.bool))
+        # Derived configuration, deliberately absent from state_dict so historical
+        # checkpoints load without missing-buffer errors.
+        self.register_buffer('_input_feature_mask', mask.view(1, -1, 1),
+                             persistent=False)
+        self.feature_set = feature_set
+
+    def _mask_features(self, features):
+        if features.shape[1] != self._input_feature_mask.shape[1]:
+            raise ValueError(f'Expected {self._input_feature_mask.shape[1]} feature '
+                             f'channels, got {features.shape[1]}.')
+        return features * self._input_feature_mask.to(features.dtype)
 
 
 def baseline_code_logits(baseline_code: torch.Tensor,
@@ -58,11 +85,13 @@ class _Heads(nn.Module):
         return code_delta, scale_delta
 
 
-class ContextMLP(nn.Module):
+class ContextMLP(_FeatureMaskMixin, nn.Module):
 
     def __init__(self, num_features: int = NUM_FEATURES, hidden: int = 128,
-                 num_layers: int = 3, group_size: int = DEFAULT_GROUP_SIZE):
+                 num_layers: int = 3, group_size: int = DEFAULT_GROUP_SIZE,
+                 feature_set: str = 'full'):
         super(ContextMLP, self).__init__()
+        self._init_feature_mask(num_features, feature_set)
         layers = []
         in_ch = num_features
         for _ in range(num_layers):
@@ -72,7 +101,7 @@ class ContextMLP(nn.Module):
         self.heads = _Heads(hidden, group_size)
 
     def forward(self, features):
-        return self.heads(self.trunk(features))
+        return self.heads(self.trunk(self._mask_features(features)))
 
 
 class _DilatedResBlock(nn.Module):
@@ -89,12 +118,14 @@ class _DilatedResBlock(nn.Module):
         return x + self.conv2(self.act(self.conv1(x)))
 
 
-class GroupConv1D(nn.Module):
+class GroupConv1D(_FeatureMaskMixin, nn.Module):
 
     def __init__(self, num_features: int = NUM_FEATURES, hidden: int = 128,
                  kernel_size: int = 9, dilations=(1, 4, 16),
-                 group_size: int = DEFAULT_GROUP_SIZE):
+                 group_size: int = DEFAULT_GROUP_SIZE,
+                 feature_set: str = 'full'):
         super(GroupConv1D, self).__init__()
+        self._init_feature_mask(num_features, feature_set)
         self.stem = nn.Sequential(
             nn.Conv1d(num_features, hidden, kernel_size, padding=kernel_size // 2),
             nn.GELU())
@@ -103,15 +134,19 @@ class GroupConv1D(nn.Module):
         self.heads = _Heads(hidden, group_size)
 
     def forward(self, features):
+        features = self._mask_features(features)
         return self.heads(self.blocks(self.stem(features)))
 
 
 def build_model(arch: str, num_features: int = NUM_FEATURES, hidden: int = 128,
-                group_size: int = DEFAULT_GROUP_SIZE) -> nn.Module:
+                group_size: int = DEFAULT_GROUP_SIZE,
+                feature_set: str = 'full') -> nn.Module:
     if arch == 'context_mlp':
-        return ContextMLP(num_features, hidden, group_size=group_size)
+        return ContextMLP(num_features, hidden, group_size=group_size,
+                          feature_set=feature_set)
     if arch == 'group_conv':
-        return GroupConv1D(num_features, hidden, group_size=group_size)
+        return GroupConv1D(num_features, hidden, group_size=group_size,
+                           feature_set=feature_set)
     raise ValueError(f'Unknown arch {arch!r} (choices: context_mlp, group_conv).')
 
 
@@ -119,6 +154,14 @@ def predict_code_and_scales(model: nn.Module, batch: dict):
     """Compose model deltas with the batch's baseline: returns (code [B, L] in
     {-1,0,1}, scales [B, L/G], code_logits [B, 3, L], log_scales [B, L/G])."""
     code_delta, scale_delta = model(batch['features'])
+    prediction_slice = batch.get('prediction_slice')
+    if prediction_slice is not None:
+        start, stop = prediction_slice
+        code_delta = code_delta[:, :, start:stop]
+        group_size = model.heads.group_size
+        if start % group_size != 0 or stop % group_size != 0:
+            raise ValueError('prediction_slice must be group-aligned.')
+        scale_delta = scale_delta[:, start // group_size:stop // group_size]
     logits = baseline_code_logits(batch['baseline_code']) + code_delta
     log_scales = torch.log(batch['baseline_scales'].clamp(min=1e-12)) + scale_delta
     code = logits.argmax(dim=1) - 1

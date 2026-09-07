@@ -56,10 +56,21 @@ PREDICTED_DECOMPOSITION_MODES = tuple(
 
 
 def load_weight_map(ckpt_path: str, device: str):
+    from ..data_utils.features import FEATURE_NAMES, feature_mask
     from ..model_utils.build_model import build_model
     ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=True)
+    feature_set = ckpt.get('feature_set', 'full')
+    saved_names = ckpt.get('feature_names')
+    if saved_names is not None and list(saved_names) != list(FEATURE_NAMES):
+        raise ValueError('Checkpoint feature_names do not match the current '
+                         '19-channel feature contract.')
+    saved_mask = ckpt.get('feature_mask')
+    expected_mask = feature_mask(feature_set).tolist()
+    if saved_mask is not None and list(saved_mask) != expected_mask:
+        raise ValueError(f'Checkpoint feature_mask does not match feature_set='
+                         f'{feature_set!r}.')
     model = build_model(ckpt['arch'], hidden=ckpt['hidden'],
-                        group_size=ckpt['group_size'])
+                        group_size=ckpt['group_size'], feature_set=feature_set)
     model.load_state_dict(ckpt['state_dict'])
     return model.to(device).eval(), ckpt['group_size']
 

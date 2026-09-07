@@ -51,7 +51,8 @@ class PairSegmentSampler:
 
     def __init__(self, pair_dir: str, split: str = 'train', segment_len: int = 512,
                  batch_size: int = 64, group_size: int = DEFAULT_GROUP_SIZE,
-                 seed: int = 0, split_fn=default_split_fn, max_cached_layers: int = 6):
+                 seed: int = 0, split_fn=default_split_fn, max_cached_layers: int = 6,
+                 context_halo: int = 0):
         full_manifest = pd.read_csv(os.path.join(pair_dir, 'manifest.csv'))
         full_manifest['split'] = full_manifest['depth'].map(split_fn)
         self.manifest = full_manifest[full_manifest['split'] == split].reset_index(drop=True)
@@ -63,6 +64,7 @@ class PairSegmentSampler:
         self.segment_len = segment_len
         self.batch_size = batch_size
         self.group_size = group_size
+        self.context_halo = context_halo
         self.max_depth = int(full_manifest['depth'].max())
         self.generator = torch.Generator().manual_seed(seed)
         self._cache = OrderedDict()
@@ -71,6 +73,9 @@ class PairSegmentSampler:
         if segment_len % group_size != 0:
             raise ValueError(f'segment_len={segment_len} not divisible by '
                              f'group_size={group_size}.')
+        if context_halo < 0 or context_halo % group_size != 0:
+            raise ValueError(f'context_halo={context_halo} must be non-negative and '
+                             f'divisible by group_size={group_size}.')
 
     # -- layer access ------------------------------------------------------
 
@@ -93,10 +98,16 @@ class PairSegmentSampler:
 
     # -- batch construction ------------------------------------------------
 
-    def _build_batch(self, row, layer, row_idx: torch.Tensor, col_start: int):
-        seg = slice(col_start, col_start + self.segment_len)
+    def _build_batch(self, row, layer, row_idx: torch.Tensor, col_start: int,
+                     center_len: int = None):
+        if center_len is None:
+            center_len = self.segment_len
+        if center_len <= 0 or center_len % self.group_size != 0:
+            raise ValueError(f'center_len={center_len} must be positive and divisible '
+                             f'by group_size={self.group_size}.')
+        seg = slice(col_start, col_start + center_len)
         group_off = col_start // self.group_size
-        n_groups = self.segment_len // self.group_size
+        n_groups = center_len // self.group_size
         gseg = slice(group_off, group_off + n_groups)
 
         base_seg = layer['base'][row_idx, seg]
@@ -129,7 +140,30 @@ class PairSegmentSampler:
                 'proj': int(row['proj_id']),
             },
         }
-        return rebuild_features(batch, self.group_size)
+        if self.context_halo == 0:
+            return rebuild_features(batch, self.group_size)
+
+        # GroupConv is evaluated on full rows, but training/validation use column
+        # segments. Supply a group-aligned halo so central predictions see the same
+        # real neighbours. At a true layer edge, keep the shorter real slice and let
+        # each convolution apply its own padding exactly as full-row inference does.
+        _, in_f = layer['base'].shape
+        wanted_start = col_start - self.context_halo
+        wanted_stop = col_start + center_len + self.context_halo
+        actual_start = max(0, wanted_start)
+        actual_stop = min(in_f, wanted_stop)
+        actual_seg = slice(actual_start, actual_stop)
+        halo_features = build_features(
+            layer['base'][row_idx, actual_seg],
+            layer['col_absmean'][actual_seg], layer['col_norm'][actual_seg],
+            layer['row_absmean'][row_idx], layer['row_norm'][row_idx],
+            layer['mean_col_norm'], layer['mean_row_norm'],
+            float(row['tensor_absmean']), row['depth'] / max(1, self.max_depth),
+            int(row['proj_id']), group_size=self.group_size)
+        batch['features'] = halo_features
+        crop_start = col_start - actual_start
+        batch['prediction_slice'] = (crop_start, crop_start + center_len)
+        return batch
 
     def sample_batch(self) -> dict:
         """One random training batch: random layer, random rows, random group-aligned
@@ -156,7 +190,8 @@ class PairSegmentSampler:
                 row_idx = torch.arange(out_f)
             else:
                 row_idx = torch.randperm(out_f, generator=gen)[:rows_per_layer]
-            for col_start in range(0, in_f - self.segment_len + 1, self.segment_len):
+            for col_start in range(0, in_f, self.segment_len):
+                center_len = min(self.segment_len, in_f - col_start)
                 for b0 in range(0, len(row_idx), self.batch_size):
                     yield self._build_batch(row, layer, row_idx[b0:b0 + self.batch_size],
-                                            col_start)
+                                            col_start, center_len=center_len)

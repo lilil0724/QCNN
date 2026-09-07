@@ -19,17 +19,86 @@ Run with:
 No pytest dependency - plain asserts, exits non-zero on first failure. CPU-only.
 """
 import os
+import shutil
 import sys
+import tempfile
 
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from weight2ternary.model_utils.build_model import (build_model, predict_code_and_scales)
+from weight2ternary.data_utils.features import (FEATURE_GROUPS, FEATURE_NAMES,
+                                                FEATURE_SETS, feature_mask)
+from weight2ternary.model_utils.build_model import (build_model,
+                                                    group_conv_context_halo,
+                                                    predict_code_and_scales)
 from weight2ternary.model_utils.losses import WeightMapLoss
 from synthetic_utils import make_batch
 
 GROUP = 64  # small group so the tests stay fast; group_size is a pass-through
+
+
+def test_feature_masks():
+    assert len(FEATURE_NAMES) == 19
+    assert int(feature_mask('full').sum()) == 19
+    assert int(feature_mask('none').sum()) == 0
+    assert int(feature_mask('element_only').sum()) == 4
+    assert int(feature_mask('no_row').sum()) == 17
+    assert set(FEATURE_SETS['no_projection']).isdisjoint(
+        FEATURE_GROUPS['projection'])
+
+    torch.manual_seed(7)
+    model = build_model('context_mlp', hidden=16, group_size=GROUP,
+                        feature_set='no_depth').eval()
+    for param in model.parameters():
+        torch.nn.init.normal_(param, std=0.1)
+    a = torch.randn(2, len(FEATURE_NAMES), 128)
+    b = a.clone()
+    b[:, FEATURE_NAMES.index('depth_frac')] += 100.0
+    out_a = model(a)
+    out_b = model(b)
+    assert all(torch.allclose(x, y) for x, y in zip(out_a, out_b))
+
+
+def test_group_conv_halo_matches_full_context():
+    torch.manual_seed(8)
+    halo = group_conv_context_halo(GROUP)
+    assert halo >= 88 and halo % GROUP == 0
+    model = build_model('group_conv', hidden=8, group_size=GROUP).eval()
+    for param in model.parameters():
+        torch.nn.init.normal_(param, std=0.05)
+    features = torch.randn(2, len(FEATURE_NAMES), 768)
+    full_code, full_scale = model(features)
+    start, stop = 256, 512
+    segment_code, segment_scale = model(features[:, :, start - halo:stop + halo])
+    assert torch.allclose(segment_code[:, :, halo:halo + stop - start],
+                          full_code[:, :, start:stop], atol=1e-5, rtol=1e-5)
+    g0, g1, gh = start // GROUP, stop // GROUP, halo // GROUP
+    assert torch.allclose(segment_scale[:, gh:gh + g1 - g0],
+                          full_scale[:, g0:g1], atol=1e-5, rtol=1e-5)
+
+    # At the real left edge, the shorter slice preserves the model's own padding.
+    edge_stop = 256
+    edge_code, edge_scale = model(features[:, :, :edge_stop + halo])
+    assert torch.allclose(edge_code[:, :, :edge_stop],
+                          full_code[:, :, :edge_stop], atol=1e-5, rtol=1e-5)
+    assert torch.allclose(edge_scale[:, :edge_stop // GROUP],
+                          full_scale[:, :edge_stop // GROUP], atol=1e-5, rtol=1e-5)
+
+
+def test_old_checkpoint_defaults_to_full_features():
+    from weight2ternary.eval_utils.assemble import load_weight_map
+    tmp_root = tempfile.mkdtemp(prefix='w2t_old_ckpt_')
+    try:
+        path = os.path.join(tmp_root, 'old.pt')
+        model = build_model('context_mlp', hidden=8, group_size=GROUP)
+        torch.save({'arch': 'context_mlp', 'hidden': 8, 'group_size': GROUP,
+                    'state_dict': model.state_dict()}, path)
+        loaded, loaded_group = load_weight_map(path, 'cpu')
+        assert loaded.feature_set == 'full'
+        assert loaded_group == GROUP
+    finally:
+        shutil.rmtree(tmp_root, ignore_errors=True)
 
 
 def test_zero_init_equals_baseline():
@@ -93,6 +162,9 @@ def test_loss_masking():
 
 
 def main():
+    test_feature_masks()
+    test_group_conv_halo_matches_full_context()
+    test_old_checkpoint_defaults_to_full_features()
     test_zero_init_equals_baseline()
     test_learnability_smoke()
     test_loss_masking()

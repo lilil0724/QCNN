@@ -37,6 +37,51 @@ FEATURE_NAMES = [
 
 NUM_FEATURES = len(FEATURE_NAMES)
 
+# Named feature groups and ablation sets.  Ablations keep the physical 19-channel
+# interface fixed and mask channels to zero, so model capacity and old checkpoints
+# stay comparable across runs.
+FEATURE_GROUPS = {
+    'element': tuple(FEATURE_NAMES[0:4]),
+    'group': tuple(FEATURE_NAMES[4:7]),
+    'row': (FEATURE_NAMES[7], FEATURE_NAMES[10]),
+    'column': (FEATURE_NAMES[8], FEATURE_NAMES[9]),
+    'depth': (FEATURE_NAMES[11],),
+    'projection': tuple(FEATURE_NAMES[12:]),
+}
+
+
+def _without(*groups_or_names):
+    removed = set()
+    for item in groups_or_names:
+        removed.update(FEATURE_GROUPS.get(item, (item,)))
+    return tuple(name for name in FEATURE_NAMES if name not in removed)
+
+
+FEATURE_SETS = {
+    'full': tuple(FEATURE_NAMES),
+    'none': (),
+    'element_only': FEATURE_GROUPS['element'],
+    'no_element': _without('element'),
+    'no_signed_ratio': _without('w_over_group_absmean'),
+    'no_abs_ratio': _without('abs_w_over_group_absmean'),
+    'no_rank': _without('rank_in_group'),
+    'no_absmax_ratio': _without('abs_w_over_group_absmax'),
+    'no_group': _without('group'),
+    'no_row': _without('row'),
+    'no_column': _without('column'),
+    'no_depth': _without('depth'),
+    'no_projection': _without('projection'),
+}
+
+
+def feature_mask(feature_set: str = 'full') -> torch.Tensor:
+    """Return a stable boolean mask in ``FEATURE_NAMES`` order."""
+    if feature_set not in FEATURE_SETS:
+        raise ValueError(f'Unknown feature_set {feature_set!r}; choices: '
+                         f'{list(FEATURE_SETS)}.')
+    kept = set(FEATURE_SETS[feature_set])
+    return torch.tensor([name in kept for name in FEATURE_NAMES], dtype=torch.bool)
+
 _CLAMP = 8.0
 _EPS = 1e-12
 

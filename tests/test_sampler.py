@@ -22,6 +22,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from weight2ternary.data_utils.features import NUM_FEATURES
 from weight2ternary.data_utils.sampler import PairSegmentSampler, default_split_fn
 from weight2ternary.eval_utils.baselines import ternarize_per_group_absmean
+from weight2ternary.model_utils.build_model import (build_model,
+                                                    group_conv_context_halo,
+                                                    predict_code_and_scales)
 from synthetic_utils import write_synthetic_pair_dir
 
 GROUP = 128
@@ -84,6 +87,33 @@ def main():
         assert seen_layers == val_layers
         expected = len(val_layers) * (IN_F // SEG_LEN) * (OUT_F // BSZ)
         assert n_batches == expected, (n_batches, expected)
+
+        # GroupConv batches carry real neighbouring context plus an aligned crop.
+        halo = group_conv_context_halo(GROUP)
+        halo_train = PairSegmentSampler(pair_dir, 'train', SEG_LEN, BSZ, GROUP,
+                                        seed=0, context_halo=halo)
+        halo_batch = halo_train.sample_batch()
+        assert halo_batch['features'].shape[0:2] == (BSZ, NUM_FEATURES)
+        assert (SEG_LEN + halo <= halo_batch['features'].shape[2]
+                <= SEG_LEN + 2 * halo)
+        crop_start, crop_stop = halo_batch['prediction_slice']
+        assert crop_stop - crop_start == SEG_LEN
+        halo_model = build_model('group_conv', hidden=8, group_size=GROUP)
+        halo_code, halo_scales, _, _ = predict_code_and_scales(halo_model, halo_batch)
+        assert halo_code.shape == halo_batch['code'].shape
+        assert halo_scales.shape == halo_batch['scales'].shape
+        assert torch.equal(halo_code, halo_batch['baseline_code'])
+
+        # A final short, group-aligned window must not be dropped during evaluation.
+        remainder_dir = write_synthetic_pair_dir(
+            os.path.join(tmp_root, 'remainder'), n_depths=N_DEPTHS,
+            out_f=OUT_F, in_f=384, group=GROUP, seed=11)
+        remainder_val = PairSegmentSampler(remainder_dir, 'val', SEG_LEN, BSZ,
+                                           GROUP, seed=0, context_halo=halo)
+        covered_entries = sum(
+            eval_batch['code'].numel()
+            for eval_batch in remainder_val.iter_eval_batches(rows_per_layer=OUT_F))
+        assert covered_entries == len(remainder_val.manifest) * OUT_F * 384
 
         # misaligned segment length is a structural error
         try:

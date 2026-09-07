@@ -13,6 +13,26 @@ findings. Generated output belongs in ignored `results/`.
 Read `docs/HANDOFF.md` and the checkpoint-family warning in
 `docs/BONSAI_QWEN3_1.7B_FINDINGS.md` before starting a new model comparison.
 
+## Experiment Logging
+
+Use `docs/實驗紀錄.md` as the canonical chronological experiment log. After every
+real checkpoint, GPU, calibration-data, or evaluation-data run, append a dated entry
+before treating the result as complete. Record failed and interrupted runs as well
+as successful ones when they affect interpretation or reproducibility.
+
+Each entry must include, when applicable: a stable run/serial identifier; exact
+command or complete arguments; git commit; model IDs and revisions; pair directory
+and manifest/checksum provenance; train/validation split; dataset and token-window
+settings; random seed; architecture and parameter count; GPU/environment; raw
+metrics; output/checkpoint paths; failures/retries; and a clearly separated research
+interpretation. Preserve raw metrics at their reported precision. Do not overwrite
+old results: append an erratum that points to the superseded entry. Keep generated
+CSV, logs, and checkpoints under ignored `results/`; the Markdown log is the tracked
+summary, not a substitute for raw artifacts.
+
+Synthetic tests and syntax checks normally belong in the implementation handoff,
+not the experiment log, unless they validate or invalidate an experimental method.
+
 ## Setup, Test, and Development Commands
 
 Install base dependencies with `pip install -r requirements.txt`; install the
@@ -55,5 +75,6 @@ when available, and include relevant plots or output excerpts for behavior chang
 
 Use `HF_HOME=/home/pcs5060ti/Desktop/hf` and
 `HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub` explicitly before Hub operations.
+Use `/home/pcs5060ti/Desktop/qcnn_data/pairs/` as the current extracted-pair root.
 Keep derived pair shards outside the repository, document exclusions or retries, and
 verify GPU-backed conclusions with actual runs rather than code inspection alone.
