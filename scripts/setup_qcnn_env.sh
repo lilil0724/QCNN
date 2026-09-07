@@ -14,6 +14,7 @@ fi
 export HF_HOME=/home/pcs5060ti/Desktop/hf
 export HF_HUB_CACHE=/home/pcs5060ti/Desktop/hf/hub
 export QCNN_PAIRS_ROOT=/home/pcs5060ti/Desktop/qcnn_data/pairs
+export QCNN_DEFAULT_PAIR="$QCNN_PAIRS_ROOT/qwen3_bonsai_1.7b"
 
 _qcnn_requested_pair="${1:-}"
 
@@ -25,8 +26,12 @@ if [[ -n "$_qcnn_requested_pair" ]]; then
         return 1
     fi
     export PAIR="$_qcnn_requested_pair"
+elif [[ -n "${PAIR_DIR:-}" && -f "$PAIR_DIR/manifest.csv" ]]; then
+    export PAIR="$PAIR_DIR"
 elif [[ -n "${PAIR:-}" && -f "$PAIR/manifest.csv" ]]; then
     : # Keep an already valid selection.
+elif [[ -f "$QCNN_DEFAULT_PAIR/manifest.csv" ]]; then
+    export PAIR="$QCNN_DEFAULT_PAIR"
 else
     _qcnn_manifests=()
     if [[ -d "$QCNN_PAIRS_ROOT" ]]; then
@@ -56,8 +61,13 @@ fi
 echo "HF_HOME=$HF_HOME"
 echo "HF_HUB_CACHE=$HF_HUB_CACHE"
 echo "QCNN_PAIRS_ROOT=$QCNN_PAIRS_ROOT"
+echo "QCNN_DEFAULT_PAIR=$QCNN_DEFAULT_PAIR"
 if [[ -n "${PAIR:-}" ]]; then
+    export PAIR_DIR="$PAIR"
     echo "PAIR=$PAIR"
+    echo "PAIR_DIR=$PAIR_DIR"
+else
+    unset PAIR_DIR
 fi
 
 unset _qcnn_requested_pair _qcnn_manifest _qcnn_manifests

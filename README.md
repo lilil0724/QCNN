@@ -45,6 +45,10 @@ Load all experiment paths into the current shell with:
 source scripts/setup_qcnn_env.sh
 ```
 
+On the current GPU box this selects
+`/home/pcs5060ti/Desktop/qcnn_data/pairs/qwen3_bonsai_1.7b` when its
+`manifest.csv` exists, and exports both `PAIR_DIR` and the legacy `PAIR` alias.
+
 If more than one extracted pair exists, pass the desired pair directory as the
 first argument.
 
